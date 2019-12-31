@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './App.css';
 
 const App = () => {
@@ -43,12 +43,23 @@ const HookSwitcher = () => {
   );
 };
 
-const PlanetInfo = ({ id }) => {
-  const [ name, setName ] = useState('');
-  const [ idPlanet, setIdPlanet ] = useState(id);
-  const [ loading, setLoading ] = useState(true);
+const getPlanet = (id) => {
+  return fetch(`https://swapi.co/api/planets/${id}/`)
+      .then(res => res.json())
+      .then(data => data);
+};
+
+const useRequest = (request) => {
+  const initialState = useMemo(() => ({
+    data: null,
+    loading: true,
+    error: null
+  }), []);
+
+  const [ dataState, setDataState ] = useState(initialState);
 
   useEffect(() => {
+    setDataState(initialState);
     // вводим переменную для возможности отменить применение результата промиса
     // для предотвращения race condition проблемы
 
@@ -56,23 +67,44 @@ const PlanetInfo = ({ id }) => {
     // to prevent race condition problems
     let cancelled = false;
 
-    fetch(`https://swapi.co/api/planets/${id}`)
-        .then(res => res.json())
-        .then(data => {
-          !cancelled && setName(data.name);
-          !cancelled && setIdPlanet(id);
-          setLoading(false);
-        }, );
-
+    request()
+        .then(data => !cancelled && setDataState({
+          data,
+          loading: false,
+          error: null
+        }))
+        .catch(error => !cancelled && setDataState({
+          data: null,
+          loading: false,
+          error
+        }));
     return () => cancelled = true;
-  }, [id]);
+  }, [ request, initialState ]);
 
+  return dataState;
+};
+
+const usePlanetInfo = (id) => {
+  const request = useCallback(
+      () => getPlanet(id), [ id ]);
+  return useRequest(request);
+};
+
+const PlanetInfo = ({ id }) => {
+
+const { data, loading, error } = usePlanetInfo(id);
+
+  if(error) {
+    return <div>Something is wrong</div>
+  }
+
+  if(loading) {
+    return <div>Loading...</div>
+  }
 
   return (
       <div>
-      { loading ? 'loading...'
-          : `Planet: id: ${idPlanet} - name: ${name}`
-      }
+      { `Planet: id: ${id} - name: ${data.name}` }
       </div>
   );
 };
